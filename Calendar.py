@@ -4,55 +4,61 @@ class Calendar:
         self.timeslots = timeslots
         self.calendar = [[0 for column in range(0, self.timeslots)] for row in range(self.days)]
 
-    def set_timeslot_busy(self, day, timeslot):
-        self.calendar[day][timeslot] = 1
+    def set_calendar_entry(self, day, timeslot, value):  # change value of entry
+        self.calendar[day][timeslot] = value
 
-    def undo_timeslot_busy(self, day, timeslot):
-        self.calendar[day][timeslot] = 0
+    def get_calendar_entry(self, day, timeslot):  # get value of entry
+        return self.calendar[day][timeslot]
 
-    def is_timeslot_busy(self, day, timeslot):
-        return self.calendar[day][timeslot] == 1
+    def set_timeslot_busy(self, day, timeslot):  # set entry busy, set to 1
+        self.set_calendar_entry(day, timeslot, 1)
 
-    def toggle_timeslot_busy(self, day, timeslot):
+    def undo_timeslot_busy(self, day, timeslot):  # set entry as free, set to 0
+        self.set_calendar_entry(day, timeslot, 0)
+
+    def is_timeslot_busy(self, day, timeslot):  # returns True if entry is busy
+        return self.get_calendar_entry(day, timeslot) == 1
+
+    def toggle_timeslot_busy(self, day, timeslot):  # toggle entry depends on value
         if not self.is_timeslot_busy(day, timeslot):
             self.set_timeslot_busy(day, timeslot)
         else:
             self.undo_timeslot_busy(day, timeslot)
 
-    def print_calendar(self):
+    def print_calendar(self):  # prints full calendar
         for day in range(0, self.days):
             for timeslot in range(0, self.timeslots):
-                print(self.calendar[day][timeslot], end='|')
+                print(self.get_calendar_entry(day, timeslot), end='|')
             print()
 
-    def get_calendar(self):
+    def get_calendar(self):  # returns full calendar
         return self.calendar
 
-    def clear_calendar(self):
+    def clear_calendar(self):  # clear calendar, own data model
         for day in range(0, self.days):
             for timeslot in range(0, self.timeslots):
                 self.undo_timeslot_busy(day, timeslot)
 
-    def is_calendar_empty(self):
-        for i in range(0, self.days):
-            for j in range(0, self.timeslots):
-                if self.is_timeslot_busy(i, j):
+    def is_calendar_empty(self):  # check if own calendar is empty
+        for day in range(0, self.days):
+            for timeslot in range(0, self.timeslots):
+                if self.is_timeslot_busy(day, timeslot):
                     return False
         return True
 
-    def overwrite_own_calendar(self, other_calendar):
+    def overwrite_own_calendar(self, other_calendar):  # copy all entries from other to own calendar
         for day in range(0, self.days):
             for timeslot in range(0, self.timeslots):
-                self.calendar[day][timeslot] = other_calendar[day][timeslot]
+                self.set_calendar_entry(day, timeslot, other_calendar[day][timeslot])
 
-    def is_other_calendar_empty(self, other_calendar):
+    def is_other_calendar_empty(self, other_calendar):  # check if other calendar is empty
         for day in range(0, self.days):
             for timeslot in range(0, self.timeslots):
                 if other_calendar[day][timeslot] == 1:
                     return False
         return True
 
-    def is_calendar_different_to_own(self, other_calendar):
+    def is_calendar_different_to_own(self, other_calendar):  # checks if other calendar differs to own
         for day in range(0, self.days):
             for timeslot in range(0, self.timeslots):
                 if self.calendar[day][timeslot] != other_calendar[day][timeslot]:
@@ -81,7 +87,7 @@ class Calendar:
                     dates.append([i, j])
         return self.pack_meetings(dates)
 
-    def get_list_of_compund_day_meetings(self, other_calendar, day):
+    def get_meeting_list_for_day(self, other_calendar, day):  # returns list of compound meetings for given day
         compound_meetings = []
         for i in range(0, self.timeslots):
             if other_calendar[day][i] == 1:
@@ -97,59 +103,84 @@ class Calendar:
 
         return compound_meetings
 
-    def get_free_slot(self, other_calendar, day, slot_needed):
-        slot_counter = 0
-        slot_list = []
-        found = False
-        print('other calendar:', other_calendar[day])
-        for timeslot in range(self.timeslots):
-            if other_calendar[day][timeslot] == 0:
-                slot_counter += 1
-                slot_list.append(timeslot)
-                if slot_needed == 1:
-                    print('1-found')
-                    return slot_list
-                elif (slot_counter == slot_needed):
-                    # if ((slot_list[len(slot_list)-1] - slot_list[0]) == slot_needed-1):
-                    print('2-found')
-                    return slot_list
-                elif slot_counter >= slot_needed:
-                    # slot_list.pop(0)
-                    if ((slot_list[len(slot_list) - 1] - slot_list[0]) == (slot_needed - 1)):
-                        print('3-found')
+    def find_possible_slots(self, day):
+        res = []
+        for timeslot in range(0, self.timeslots):
+            if not self.is_timeslot_busy(day, timeslot):
+                res.append(timeslot)
+        return res
+
+    def is_current_meeting_free(self, list_of_possible_timeslots, temp_meeting):
+        temp_meeting_is_possible = True
+        for timeslot_ct in range(0, temp_meeting[1]):
+            timeslot = temp_meeting[0]
+            timeslot += timeslot_ct
+            print(timeslot)
+            if timeslot not in list_of_possible_timeslots:
+                return False
+            else:
+                temp_meeting_is_possible and True
+            print(temp_meeting_is_possible)
+
+        return temp_meeting_is_possible
+
+    def find_compound_slot(self, list_of_possible_timeslots, temp_meeting):  # add day as argument
+        # insert code that tests if given temp_slot is free in own calendar then copy meeting to own
+        if self.is_current_meeting_free(list_of_possible_timeslots, temp_meeting):
+            print('TODO: func for copying temp meeting to own calendar')
+            free = []
+            for timeslot_ct in range(0, temp_meeting[1]):
+                timeslot = temp_meeting[0]
+                timeslot += timeslot_ct
+                free.append(timeslot)
+            return free
+        else:
+            number_of_slots = len(list_of_possible_timeslots)
+            length_of_meeting = temp_meeting[1]
+            res = []
+            i = 0
+            i_ink_start = 0
+            while i < number_of_slots:
+                res.append(list_of_possible_timeslots[i])
+                i += 1
+                print(res)
+                if len(res) == length_of_meeting:
+                    if (res[len(res) - 1] - res[0]) == (length_of_meeting - 1):
+                        return res
                     else:
-                        print('4-found')
-                        slot_list.pop(0)
-                        return slot_list
-        return [-1]
+                        i_ink_start += 1
+                        i = i_ink_start
 
-    def find_timeslot(self, other_calendar):  # besser wenn server immer alles durchguckt wo platz
-        compound_slots_free = True
+                    res = []  # clear list after storing three elements
+
+        return [-1]  # return if no slot of needed length is found
+
+    def add_meeting_to_slot(self, possible_entry_pos, day, meeting):
+        len_of_meeting = meeting[1]
+        for entry in range(0, len_of_meeting):
+            self.set_calendar_entry(day, possible_entry_pos[entry], 1)
+
+    def add_meetings_from_calendar(self, other_calendar):
         for day in range(0, self.days):
-            all_meetings = self.get_list_of_compund_day_meetings(other_calendar,
-                                                                 day)  # speichert alle Termine des tages in Liste
-            while len(all_meetings) > 0:
-                temp_meeting = all_meetings.pop(0)
+            day_meetings_list = self.get_meeting_list_for_day(other_calendar, day)
 
-                for len_of_temp_meet in range(0, temp_meeting[1]):
-                    compound_slots_free = compound_slots_free and not self.is_timeslot_busy(day, temp_meeting[
-                        0] + len_of_temp_meet)
-                if compound_slots_free:
-                    for j in range(0, temp_meeting[1]):
-                        self.set_timeslot_busy(day, temp_meeting[0] + j)
-                else:
-                    print('compound slot not free')
+            while len(day_meetings_list) > 0:
+                temp_meeting = day_meetings_list.pop(0)
+                possible_slots = self.find_possible_slots(day)
+                possible_entry_pos = self.find_compound_slot(possible_slots,
+                                                             temp_meeting)  # function have to prefer timeslot from temp_meeting
+                self.add_meeting_to_slot(possible_entry_pos, day, temp_meeting)
 
-        return False
+        return True
 
     def update_calendar(self, other_calendar):
         if self.is_calendar_empty():
             print('calendar is empty')
             for i in range(0, self.days):
                 for j in range(0, self.timeslots):
-                    self.calendar[i][j] = other_calendar[i][j]  # write better code with getter and setter functions
+                    self.calendar[i][j] = other_calendar[i][j]  # use overwrite functions
             print('perform update on empty calendar')
-        elif self.find_timeslot(other_calendar):
-            print('update_calendar: timeslot found')
+        elif self.add_meetings_from_calendar(other_calendar):
+            print('update_calendar: added meetings succesful')
         else:
-            print('update_calendar: not possible')
+            print('update_calendar: can not add meetings')

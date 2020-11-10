@@ -4,9 +4,12 @@
 
 import wx
 import wx.grid as gridlib
-import socket
 from Calendar import *
 from logic_client import *
+import math
+import copy
+
+import threading
 
 days = 7
 half_hours = 16
@@ -21,6 +24,14 @@ class ClientFrame(wx.Frame):
         self.columns = days
         self.edge_length = 39
 
+        self.name_string = 'meeting'
+        """
+        self.dlg = wx.TextEntryDialog(self, 'Wie heißen Sie?', 'Eingabeformular')
+        self.dlg.SetValue("Martin")
+        if self.dlg.ShowModal() == wx.ID_OK:
+            self.name_string = self.dlg.GetValue()
+        self.dlg.Destroy()
+        """
         ######################
         # define grid object #
         ######################
@@ -61,11 +72,19 @@ class ClientFrame(wx.Frame):
                 self.grid.SetCellBackgroundColour(j, i, wx.WHITE)
                 self.grid.SetCellValue(j, i, ' ')
 
-        self.grid.SetCellValue(16, 0, 'Senden')
+        self.grid.SetCellValue(16, 0, 'Sende Plan')
         self.grid.SetReadOnly(16, 0, True)
 
         self.grid.SetCellValue(16, 1, 'Löschen')
         self.grid.SetReadOnly(16, 1, True)
+
+        self.grid.SetCellValue(16, 4, 'Dauer:')
+        self.grid.SetReadOnly(16, 4, True)
+
+        self.grid.SetCellValue(16, 5, '1')
+
+        self.grid.SetCellValue(16, 6, 'Suche Termin')
+        self.grid.SetReadOnly(16, 6, True)
 
         self.grid.SetDefaultCellAlignment(wx.ALIGN_CENTRE, wx.ALIGN_CENTRE)
         self.grid.Bind(gridlib.EVT_GRID_CELL_LEFT_CLICK, self.single_left_click)
@@ -75,13 +94,33 @@ class ClientFrame(wx.Frame):
         #################
         self.HOST = '127.0.0.1'
         self.PORT = 27960
+        self.s = None
         self.client_calendar_obj = Calendar(self.columns, self.rows)
-        # self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.old_calendar_data = [-1]
 
         self.Centre()
         self.SetSize(
             (self.rows * self.edge_length + 7, self.columns * self.edge_length + 145))
         self.Show()
+
+    def refresh_view(self):
+        print('refresh')
+        for i in range(0, self.columns):
+            for j in range(0, self.rows):
+                if self.client_calendar_obj.is_timeslot_busy(i, j):
+                    self.grid.SetCellValue(j, i, self.name_string)
+                    self.grid.SetCellBackgroundColour(j, i, wx.RED)
+                    self.grid.ForceRefresh()
+
+    def toggle_free(self, x, y):
+        self.grid.SetCellValue(y, x, self.name_string)
+        self.grid.SetCellBackgroundColour(y, x, wx.RED)
+        self.client_calendar_obj.toggle_timeslot_busy(x, y)
+
+    def toggle_busy(self, x, y):
+        self.grid.SetCellValue(y, x, ' ')
+        self.grid.SetCellBackgroundColour(y, x, wx.WHITE)
+        self.client_calendar_obj.toggle_timeslot_busy(x, y)
 
     def single_left_click(self, event):
         print('left click')
@@ -92,53 +131,66 @@ class ClientFrame(wx.Frame):
         print(pos)
         if pos[1] == 16:
             if pos[0] == 0:
-                print('click Senden Button')
+                print('click send button')
+
+                diff_calendar = get_diff_of_current_and_old_calendar(self.client_calendar_obj.get_calendar(),
+                                                                     self.old_calendar_data, self.columns,
+                                                                     self.rows)
+
+                print('diff beetween old an current:', diff_calendar)
+
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.connect((self.HOST, self.PORT))
-                    s.sendall(str.encode(str(self.client_calendar_obj.get_calendar())))
+                    s.sendall(str.encode(str(diff_calendar)))
                     response = s.recv(1024).decode()
+                    print('received calendar:', response)
+
+                    self.old_calendar_data = self.client_calendar_obj.calendar
+                    print('old calendar:', self.old_calendar_data)
 
                     received_calendar = parse_string_to_calendar_array(response)
+                    self.client_calendar_obj.calendar = received_calendar
+                    print('current calendar:', self.client_calendar_obj.calendar)
 
-                    if self.client_calendar_obj.is_calendar_different_to_own(received_calendar):
-                        print('look for changes')
-                        self.client_calendar_obj.overwrite_own_calendar(received_calendar)
-                        for i in range(0, self.columns):
-                            for j in range(0, self.rows):
-                                if self.client_calendar_obj.is_timeslot_busy(i, j) == True:
-                                    self.grid.SetCellValue(j, i, 'meeting')
-                                    self.grid.SetCellBackgroundColour(j, i, wx.RED)
-                                    self.grid.ForceRefresh()
-                        # print(received_calendar)
-                    else:
-                        print('no changes')
-                        print('TODO: nothing')
-                        print(received_calendar)
+                    self.refresh_view()
 
             elif pos[0] == 1:
-                print('click Löschen Button')
+                print('click clear button')
                 self.client_calendar_obj.clear_calendar()
                 self.client_calendar_obj.print_calendar()
                 for i in range(0, self.columns):
                     for j in range(0, self.rows):
-                        if self.grid.GetCellValue(j, i) == 'meeting':
+                        if self.grid.GetCellValue(j, i) == self.name_string:
                             self.grid.SetCellValue(j, i, ' ')
                             self.grid.SetCellBackgroundColour(j, i, wx.WHITE)
                             self.grid.ForceRefresh()
+
+            elif pos[0] == 6:
+                print('click serach meet')
+                meeting_time = float(self.grid.GetCellValue(16, 5))
+                slots_float = meeting_time / 0.5
+                slots = math.ceil(slots_float)
+
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((self.HOST, self.PORT))
+                    s.sendall(str.encode(str([slots])))
+                    response = s.recv(1024).decode()
+                    print('received calendar:', response)
+                    day = int(response[1])
+                    slot = int(response[4])
+
+                for i in range(0, slots):
+                    self.grid.SetCellBackgroundColour(slot + i, day, wx.GREEN)
+                    self.grid.ForceRefresh()
+
             else:
                 pass
         elif self.grid.GetCellValue(pos[1], pos[0]) == ' ':
             print('toggle free')
-            self.grid.SetCellValue(pos[1], pos[0], 'meeting')
-            self.grid.SetCellBackgroundColour(pos[1], pos[0], wx.RED)
-            self.client_calendar_obj.toggle_timeslot_busy(pos[0], pos[1])
-            self.client_calendar_obj.print_calendar()
+            self.toggle_free(pos[0], pos[1])
         else:
             print('toggle busy')
-            self.grid.SetCellValue(pos[1], pos[0], ' ')
-            self.grid.SetCellBackgroundColour(pos[1], pos[0], wx.WHITE)
-            self.client_calendar_obj.toggle_timeslot_busy(pos[0], pos[1])
-            self.client_calendar_obj.print_calendar()
+            self.toggle_busy(pos[0], pos[1])
 
 
 #################
@@ -148,4 +200,5 @@ class ClientFrame(wx.Frame):
 if __name__ == '__main__':
     app = wx.App(0)
     frame = ClientFrame(None)
+
     app.MainLoop()
